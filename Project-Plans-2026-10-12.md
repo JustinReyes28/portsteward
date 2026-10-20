@@ -2,7 +2,7 @@
 
 Inspiration: fkill-cli. Prepared 12 October 2026 (Asia/Singapore).
 
-This folder contains the five phase files for this project, from product definition through implementation, GitHub publishing, Reddit/X/LinkedIn marketing using browser computer use, and maintenance. This is local planning documentation; publishing is a future milestone.
+This folder contains the five original phase plans. Phases 1–3 have now been executed for the checked working name PortSteward, with code and evidence in the private GitHub repository. Phase 4 validation/public release and phase 5 marketing remain future work. See [current execution status](docs/EXECUTION-STATUS.md).
 
 [Repository inspiration](Repo-Inspiration-2026-10-12.md) · [Public README](README.md) · [Reference notes](INSPIRATION-REFERENCE.md)
 
@@ -30,7 +30,7 @@ Know which development project owns a port and manage that project's server deli
 
 This project specifies three distinct capabilities, improvements to the core experience, a data model and component design, four build milestones, meaningful acceptance checks, a beta task, its own GitHub milestones, and tailored marketing drafts. Each keeps accurate upstream credit and a provenance register. Interface decoration alone is not the evidence of independent value; the implemented user workflow and its development records are.
 
-## Publication boundaries
+## Original planning boundaries (historical)
 
 No application is implemented or uploaded by this planning task. No repository is cloned or dependency installed. Social copy is future draft material, not a claim that the products already exist. Real publishing requires the correct user account, final destination, demonstrated feature claims, and the appropriate user authorisation when execution is requested.
 

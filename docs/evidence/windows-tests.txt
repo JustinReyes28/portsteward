@@ -1,0 +1,10 @@
+✔ Windows live journey: actual listeners, native mismatch refusal, CLI restart and isolated second app (22571.6864ms)
+ℹ {"webPort":64130,"apiPort":64131,"restartedPid":19344,"secondAppUnaffected":true,"nativeMismatchRefused":true,"unconfirmedLaunchRefused":true,"missingExecutableHandled":true,"exitReconciled":true}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 22717.0653

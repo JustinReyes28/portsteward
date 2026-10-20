@@ -1,4 +1,21 @@
-# GitHub setup
-Development visibility: private. Public release remains phase 4.
-Remote owner, URL and milestone issues: pending a verified authenticated account.
-The local Git repository records reviewable increments. No repository URL or issue number in the earlier Word documents is treated as verified.
+# Verified GitHub setup
+Account: JustinReyes28, verified through the user's existing GitHub CLI keyring sign-in. The separate sandbox account did not have access; authenticated remote operations used the user account context without copying credentials.
+Repository: https://github.com/JustinReyes28/portsteward
+Visibility: PRIVATE. Default branch: main.
+No public release, npm publication or social post was made.
+
+Planning/scaffold checkpoint: 997d9d9.
+Complete implementation: 12bc27930caa7757dabd818536b176ec3abccde4, pushed to main.
+
+Milestone issues created with concrete acceptance criteria and closed by the implementation commit:
+- https://github.com/JustinReyes28/portsteward/issues/1 — live inspection
+- https://github.com/JustinReyes28/portsteward/issues/2 — registry and ownership evidence
+- https://github.com/JustinReyes28/portsteward/issues/3 — deliberate control
+- https://github.com/JustinReyes28/portsteward/issues/4 — daily use/recovery
+
+Windows CI run: https://github.com/JustinReyes28/portsteward/actions/runs/39391307911
+Final CI outcome is recorded below. The concluding documentation commit uploads all evidence and completion records; its commit/tree identity is checked against GitHub after push.
+
+CI runs on a GitHub-hosted Windows runner. Action and runtime downloads occur there; no package install is used on this workstation. Workflow action revisions were read from their official GitHub refs and pinned by SHA.
+
+Verified CI outcome: SUCCESS for implementation commit 12bc27930caa7757dabd818536b176ec3abccde4; Windows job completed 2026-10-20T08:09:30Z. Syntax, 27 automated tests and the real Windows workflow all succeeded.

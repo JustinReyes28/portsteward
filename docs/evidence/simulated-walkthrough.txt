@@ -1,0 +1,61 @@
+SIMULATED WALKTHROUGH — deterministic adapter, no real processes changed.
+=== STEP 1 & 2: REGISTER TWO SAMPLE APPS & IDENTIFY OCCUPIED PORT 3000 ===
+PortSteward 0.1.0-alpha.1 | DARK | NORMAL
+[1] Projects  [2] Ports  [3] Details  [4] History | OVERVIEW
+----------------------------------------------------------------------------------------------------
+Port 3000 is occupied by external PID 4820; restart disabled for unmanaged process.
+  SAVED PROJECTS
+  * bluesky-web | BlueSky Web App | 3000,3001 | group: -
+  * geobrains-api | GeoBrains Auth API | 3000,4000 | group: -
+  LIVE LISTENERS
+  > 3000 PID 4820 ambiguous-conflict | Owner unverified | CONFLICT(2) configured: BlueSky Web App,Ge
+  5432 PID ? access-denied | Owner unverified
+  HISTORY
+STOP PREVIEW
+Project: unverified
+Port/address: 3000 / 127.0.0.1
+PID: 4820
+Start token: 2026-10-20T07:50:00.000Z
+Executable: C:\Program Files\nodejs\node.exe
+Command: node "C:\Users\Justin Reyes\Projects\legacy-prototype\server.js" --port 3000
+Evidence: ambiguous-conflict
+External process: restart is unavailable; no launch command is inferred.
+----------------------------------------------------------------------------------------------------
+Tab/1-4 views | Up/Down select | Space refresh | F favorites | / project | G group
+Enter details | S preview stop | R preview managed restart
+T theme | Q quit | Esc cancel | 2 profiles, 2 listeners
+
+=== STEP 3 & 4: LAUNCH FROM SAVED PROFILE & RESTART ONLY THAT MANAGED SERVER ===
+• Stop external listener (port 3000): Stopped verified process PID 4820 (node "C:\Users\Justin Reyes\Projects\legacy-prototype\server.js" --port 3000) on port 3000.
+• Launch BlueSky Web App (port 3000): Launched "BlueSky Web App" on port 3000 with PID 4100.
+• Launch GeoBrains Auth API (port 4000): Launched "GeoBrains Auth API" on port 4000 with PID 4101.
+• Controlled restart on port 3000: Restarted "BlueSky Web App" on port 3000: stopped PID 4100 and launched PID 4102.
+PortSteward 0.1.0-alpha.1 | DARK | COMPLETED
+[1] Projects  [2] Ports  [3] Details  [4] History | OVERVIEW
+----------------------------------------------------------------------------------------------------
+Restarted "BlueSky Web App" on port 3000: stopped PID 4100 and launched PID 4102.
+  SAVED PROJECTS
+  * bluesky-web | BlueSky Web App | 3000,3001 | group: -
+  * geobrains-api | GeoBrains Auth API | 3000,4000 | group: -
+  LIVE LISTENERS
+  > 3000 PID 4102 exact-managed | BlueSky Web App | CONFLICT(2) configured: BlueSky Web App,GeoBrain
+  4000 PID 4101 exact-managed | GeoBrains Auth API
+  5432 PID ? access-denied | Owner unverified
+  HISTORY
+  running BlueSky Web App
+  running GeoBrains Auth API
+  stopped BlueSky Web App
+STOP PREVIEW
+Project: BlueSky Web App
+Port/address: 3000 / 127.0.0.1
+PID: 4102
+Start token: 2026-10-20T08:06:13.919Z
+Executable: C:\Program Files\nodejs\node.exe
+Command: C:\Program Files\nodejs\node.exe "C:\Users\Justin Reyes\Projects\BlueSky Bulletin\dev-serve
+r.js" --port 3000
+Evidence: exact-managed
+Exact managed run; eligible for controlled restart.
+----------------------------------------------------------------------------------------------------
+Tab/1-4 views | Up/Down select | Space refresh | F favorites | / project | G group
+Enter details | S preview stop | R preview managed restart
+T theme | Q quit | Esc cancel | 2 profiles, 3 listeners

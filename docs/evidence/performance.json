@@ -1,0 +1,22 @@
+{
+  "measuredAt": "2026-10-20T08:07:55.631Z",
+  "machine": "PortSteward Windows workspace host",
+  "os": "Windows_NT 10.0.26200",
+  "arch": "x64",
+  "node": "v25.2.1",
+  "method": "Three fresh CLI --help starts; three sequential full local TCP discovery calls; source-package bytes exclude preinstalled Node/PowerShell runtimes, Git, tests, docs and user data.",
+  "startupMs": [
+    102.58,
+    92.5,
+    98.24
+  ],
+  "refreshMs": [
+    846.19,
+    880.42,
+    862.51
+  ],
+  "listenerCount": 26,
+  "sourcePackageBytes": 74018,
+  "externalPackageCount": 0,
+  "baseline": "First usable Windows implementation. Prior supplied CLI printed no output, so no valid before/after functional performance claim is made."
+}

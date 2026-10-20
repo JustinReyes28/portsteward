@@ -1,0 +1,63 @@
+STATE NORMAL
+PortSteward 0.1.0-alpha.1 | DARK | NORMAL
+[1] Projects  [2] Ports  [3] Details  [4] History | PROJECTS
+------------------------------------------------------------------------------------------
+> * sample-web | Sample Web | 3000 | group: samples
+------------------------------------------------------------------------------------------
+Tab/1-4 views | Up/Down select | Space refresh | F favorites | / project | G group
+A add E edit D delete L launch V favorite U undo I import X export
+T theme | Q quit | Esc cancel | 1 profiles, 0 listeners
+
+STATE EMPTY
+PortSteward 0.1.0-alpha.1 | DARK | EMPTY
+[1] Projects  [2] Ports  [3] Details  [4] History | PROJECTS
+------------------------------------------------------------------------------------------
+> No profiles. Press A to add a project.
+------------------------------------------------------------------------------------------
+Tab/1-4 views | Up/Down select | Space refresh | F favorites | / project | G group
+A add E edit D delete L launch V favorite U undo I import X export
+T theme | Q quit | Esc cancel | 0 profiles, 0 listeners
+
+STATE LOADING
+PortSteward 0.1.0-alpha.1 | DARK | LOADING
+[1] Projects  [2] Ports  [3] Details  [4] History | PROJECTS
+------------------------------------------------------------------------------------------
+Reading local listeners...
+> * sample-web | Sample Web | 3000 | group: samples
+------------------------------------------------------------------------------------------
+Tab/1-4 views | Up/Down select | Space refresh | F favorites | / project | G group
+A add E edit D delete L launch V favorite U undo I import X export
+T theme | Q quit | Esc cancel | 1 profiles, 0 listeners
+
+STATE FAILURE
+PortSteward 0.1.0-alpha.1 | DARK | FAILURE
+[1] Projects  [2] Ports  [3] Details  [4] History | PROJECTS
+------------------------------------------------------------------------------------------
+Local inspection failed; Space retries.
+> * sample-web | Sample Web | 3000 | group: samples
+------------------------------------------------------------------------------------------
+Tab/1-4 views | Up/Down select | Space refresh | F favorites | / project | G group
+A add E edit D delete L launch V favorite U undo I import X export
+T theme | Q quit | Esc cancel | 1 profiles, 0 listeners
+
+STATE CANCELLED
+PortSteward 0.1.0-alpha.1 | DARK | CANCELLED
+[1] Projects  [2] Ports  [3] Details  [4] History | PROJECTS
+------------------------------------------------------------------------------------------
+Cancelled; no process changed.
+> * sample-web | Sample Web | 3000 | group: samples
+------------------------------------------------------------------------------------------
+Tab/1-4 views | Up/Down select | Space refresh | F favorites | / project | G group
+A add E edit D delete L launch V favorite U undo I import X export
+T theme | Q quit | Esc cancel | 1 profiles, 0 listeners
+
+STATE COMPLETED
+PortSteward 0.1.0-alpha.1 | DARK | COMPLETED
+[1] Projects  [2] Ports  [3] Details  [4] History | PROJECTS
+------------------------------------------------------------------------------------------
+Profile saved.
+> * sample-web | Sample Web | 3000 | group: samples
+------------------------------------------------------------------------------------------
+Tab/1-4 views | Up/Down select | Space refresh | F favorites | / project | G group
+A add E edit D delete L launch V favorite U undo I import X export
+T theme | Q quit | Esc cancel | 1 profiles, 0 listeners

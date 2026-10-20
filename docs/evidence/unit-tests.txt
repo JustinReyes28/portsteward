@@ -1,0 +1,35 @@
+✔ Milestone 1: Read-only live port view shows active listener and preserves unknown/access-denied details (8.8919ms)
+✔ Milestone 2: Project registry distinguishes two sample projects and surfaces ambiguous port conflicts clearly (37.4285ms)
+✔ Milestone 3: Stop action re-verifies process identity and rejects stale selection when PID is reused (3.5853ms)
+✔ Milestone 3: Refuses stop when OS adapter cannot enforce identity binding or when privileges are denied (5.3066ms)
+✔ Milestone 3: Controlled restart is strictly allowed for PortPilot-managed runs and refused for external processes (47.9699ms)
+✔ Milestone 4: Daily ergonomics - occupied port check, failed launch resilience, child exit reconciliation, undo, export/import, and .bak recovery (134.5378ms)
+✔ End-to-End Beta Task Walkthrough executes cleanly and renders UI frames (89.4739ms)
+✔ Profiles reject malformed argument arrays, relative roots, coercions and control characters (2.8966ms)
+✔ Path matching uses complete path boundaries including UNC and case rules (0.4895ms)
+✔ Port-only expectations do not claim a verified owner (0.3426ms)
+✔ Undo persists across commands and does not restore stale process history (39.9097ms)
+✔ Import validates all profiles and duplicates before writing; imported runs grant no authority (24.5493ms)
+✔ Unsupported schema is never silently rolled back to an older backup (15.22ms)
+✔ Active registry writer lock refuses concurrent mutation and preserves bytes (12.0959ms)
+✔ A race after pre-stop revalidation is refused by the bound adapter (4.0605ms)
+✔ Preview capabilities reject fabrication, reuse, expiry and cancellation (7.562ms)
+✔ Managed restart preserves original run definition after a profile edit (60.0262ms)
+✔ Discovery failure propagates; favorites, project and group filters retain evidence (24.2844ms)
+✔ Multiple observed identities on a port require an explicit PID selection (5.954ms)
+✔ Terminal views preserve selected rows, full preview identity and plain error states (1.155ms)
+✔ CLI profile persistence works across invocations without installation (29.517ms)
+✔ Keyboard flow navigates, cancels a profile draft, confirms launch and toggles theme (55.6052ms)
+✔ A history write failure cleans up the newly launched process using its bound identity (12.9567ms)
+✔ A successful stop followed by failed history persistence is reported truthfully and restart is refused (26.2078ms)
+✔ Invalid CLI PID is rejected before any process discovery (0.3635ms)
+✔ Backup failure distinguishes a committed primary from an unchanged operation (12.4329ms)
+✔ An initial terminal discovery failure retains a usable recovery view (30.069ms)
+ℹ tests 27
+ℹ suites 0
+ℹ pass 27
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 508.8371
