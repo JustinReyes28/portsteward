@@ -37,7 +37,7 @@ function createTestHarness(initialListeners = []) {
   };
 }
 
-test('Milestone 1: Read-only live port view shows active listener and preserves unknown/access-denied details', () => {
+test('Milestone 1: Read-only live port view shows active listener and preserves unknown/access-denied details', async () => {
   const h = createTestHarness([
     {
       port: 3000,
@@ -56,7 +56,7 @@ test('Milestone 1: Read-only live port view shows active listener and preserves 
   ]);
 
   try {
-    const dash = h.supervisor.inspectDashboard();
+    const dash = await h.supervisor.inspectDashboard();
     assert.equal(dash.portMatches.length, 2);
 
     const match3000 = dash.portMatches.find((m) => m.port === 3000);
@@ -72,7 +72,7 @@ test('Milestone 1: Read-only live port view shows active listener and preserves 
   }
 });
 
-test('Milestone 2: Project registry distinguishes two sample projects and surfaces ambiguous port conflicts clearly', () => {
+test('Milestone 2: Project registry distinguishes two sample projects and surfaces ambiguous port conflicts clearly', async () => {
   const h = createTestHarness([
     {
       port: 3000,
@@ -111,7 +111,7 @@ test('Milestone 2: Project registry distinguishes two sample projects and surfac
       launchArgs: ['index.js'],
     });
 
-    const dash = h.supervisor.inspectDashboard();
+    const dash = await h.supervisor.inspectDashboard();
     const m3000 = dash.portMatches.find((m) => m.port === 3000);
     assert.equal(m3000.confidence, OwnershipConfidence.PATH_AND_PORT);
     assert.equal(m3000.primaryProject.id, 'app-alpha');
@@ -126,7 +126,7 @@ test('Milestone 2: Project registry distinguishes two sample projects and surfac
   }
 });
 
-test('Milestone 3: Stop action re-verifies process identity and rejects stale selection when PID is reused', () => {
+test('Milestone 3: Stop action re-verifies process identity and rejects stale selection when PID is reused', async () => {
   const h = createTestHarness([
     {
       port: 3000,
@@ -140,7 +140,7 @@ test('Milestone 3: Stop action re-verifies process identity and rejects stale se
 
   try {
     // 1. User previews stopping port 3000 (PID 7001)
-    const preview = h.supervisor.previewStopByPort(3000);
+    const preview = await h.supervisor.previewStopByPort(3000);
     assert.equal(preview.canStop, true);
     assert.equal(preview.pid, 7001);
 
@@ -152,7 +152,7 @@ test('Milestone 3: Stop action re-verifies process identity and rejects stale se
     });
 
     // 3. User confirms stop -> Supervisor MUST reject the stale selection!
-    const stopRes = h.supervisor.executeConfirmedStop(preview);
+    const stopRes = await h.supervisor.executeConfirmedStop(preview);
     assert.equal(stopRes.ok, false);
     assert.equal(stopRes.code, 'IDENTITY_MISMATCH_PID_REUSED');
     assert.match(stopRes.message, /PID Reuse Protection/);
@@ -164,7 +164,7 @@ test('Milestone 3: Stop action re-verifies process identity and rejects stale se
   }
 });
 
-test('Milestone 3: Refuses stop when OS adapter cannot enforce identity binding or when privileges are denied', () => {
+test('Milestone 3: Refuses stop when OS adapter cannot enforce identity binding or when privileges are denied', async () => {
   const h = createTestHarness([
     {
       port: 3000,
@@ -183,13 +183,13 @@ test('Milestone 3: Refuses stop when OS adapter cannot enforce identity binding 
 
   try {
     // Access denied port cannot be stopped
-    const deniedPreview = h.supervisor.previewStopByPort(443);
+    const deniedPreview = await h.supervisor.previewStopByPort(443);
     assert.equal(deniedPreview.canStop, false);
     assert.match(deniedPreview.reason, /OS privilege boundaries/);
 
     // When adapter does not support identity binding, stop is disabled and read-only inspection is retained
     h.adapter.enforceIdentityBindingSupported = false;
-    const unsupportedPreview = h.supervisor.previewStopByPort(3000);
+    const unsupportedPreview = await h.supervisor.previewStopByPort(3000);
     assert.equal(unsupportedPreview.canStop, false);
     assert.match(unsupportedPreview.reason, /cannot guarantee identity-bound process termination/);
   } finally {
@@ -197,7 +197,7 @@ test('Milestone 3: Refuses stop when OS adapter cannot enforce identity binding 
   }
 });
 
-test('Milestone 3: Controlled restart is strictly allowed for PortPilot-managed runs and refused for external processes', () => {
+test('Milestone 3: Controlled restart is strictly allowed for PortPilot-managed runs and refused for external processes', async () => {
   const h = createTestHarness([
     {
       port: 3000,
@@ -220,12 +220,12 @@ test('Milestone 3: Controlled restart is strictly allowed for PortPilot-managed 
     });
 
     // Attempt to restart external process on 3000 -> MUST be refused!
-    const externalRestart = h.supervisor.restartByPort(3000);
+    const externalRestart = await h.supervisor.restartByPort(3000);
     assert.equal(externalRestart.ok, false);
     assert.equal(externalRestart.code, 'UNMANAGED_PROCESS_RESTART_REFUSED');
 
     // Launch managed run on port 3005 (also verifies Windows paths with spaces in executable & args)
-    const launchRes = h.supervisor.launchProject('storefront', { preferredPort: 3005 });
+    const launchRes = await h.supervisor.launchProject('storefront', { preferredPort: 3005 });
     assert.equal(launchRes.ok, true);
     const firstPid = launchRes.run.pid;
     assert.deepEqual(launchRes.run.launchArgs, [
@@ -235,7 +235,7 @@ test('Milestone 3: Controlled restart is strictly allowed for PortPilot-managed 
     ]);
 
     // Restart managed run on port 3005 -> MUST succeed and issue a new PID!
-    const managedRestart = h.supervisor.restartByPort(3005);
+    const managedRestart = await h.supervisor.restartByPort(3005);
     assert.equal(managedRestart.ok, true);
     assert.equal(managedRestart.code, 'MANAGED_RUN_RESTARTED');
     assert.equal(managedRestart.previousPid, firstPid);
@@ -245,7 +245,7 @@ test('Milestone 3: Controlled restart is strictly allowed for PortPilot-managed 
   }
 });
 
-test('Milestone 4: Daily ergonomics - occupied port check, failed launch resilience, child exit reconciliation, undo, export/import, and .bak recovery', () => {
+test('Milestone 4: Daily ergonomics - occupied port check, failed launch resilience, child exit reconciliation, undo, export/import, and .bak recovery', async () => {
   const h = createTestHarness([]);
 
   try {
@@ -275,22 +275,22 @@ test('Milestone 4: Daily ergonomics - occupied port check, failed launch resilie
 
     // 2. Failed launch produces actionable message and leaves registry intact
     h.adapter.failNextLaunchReason = 'ENOENT: executable not found at specified path';
-    const failedLaunch = h.supervisor.launchProject('proj-1');
+    const failedLaunch = await h.supervisor.launchProject('proj-1');
     assert.equal(failedLaunch.ok, false);
     assert.equal(failedLaunch.code, 'LAUNCH_SPAWN_ERROR');
     assert.match(failedLaunch.message, /ENOENT/);
     assert.equal(h.store.load().projects.length, 1);
 
     // 3. Successful launch followed by occupied port prevention
-    const okLaunch = h.supervisor.launchProject('proj-1');
+    const okLaunch = await h.supervisor.launchProject('proj-1');
     assert.equal(okLaunch.ok, true);
-    const occupiedAttempt = h.supervisor.launchProject('proj-1');
+    const occupiedAttempt = await h.supervisor.launchProject('proj-1');
     assert.equal(occupiedAttempt.ok, false);
     assert.equal(occupiedAttempt.code, 'PORT_ALREADY_OCCUPIED');
 
     // 4. Child process unexpected exit is reconciled on next dashboard inspection
     h.adapter.simulateProcessExit(okLaunch.run.pid, 1);
-    const dashAfterExit = h.supervisor.inspectDashboard();
+    const dashAfterExit = await h.supervisor.inspectDashboard();
     const exitedRunRecord = dashAfterExit.recentRuns.find((r) => r.runId === okLaunch.run.runId);
     assert.equal(exitedRunRecord.status, 'exited');
 
@@ -311,8 +311,8 @@ test('Milestone 4: Daily ergonomics - occupied port check, failed launch resilie
   }
 });
 
-test('End-to-End Beta Task Walkthrough executes cleanly and renders UI frames', () => {
-  const output = runBetaTaskWalkthrough();
+test('End-to-End Beta Task Walkthrough executes cleanly and renders UI frames', async () => {
+  const output = await runBetaTaskWalkthrough();
   assert.match(output, /BlueSky Web App/);
   assert.match(output, /GeoBrains Auth API/);
   assert.match(output, /CONFLICT\(2\)/);

@@ -4,7 +4,10 @@
  * Windows path spaces, and failed launches) and LiveOsAdapter (for real system inspection).
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Deterministic in-memory adapter for unit/integration tests and interactive walkthroughs.
@@ -262,70 +265,99 @@ export class FakeOsAdapter {
 }
 
 /**
- * Live OS Adapter supporting read-only port inspection on Linux/macOS/Windows
- * and identity-revalidated termination.
+ * Windows-first adapter. All requests are local JSON over stdin, never shell text.
+ * Native helper holds one Windows process handle through validation and termination.
  */
 export class LiveOsAdapter {
-  constructor() {
-    this.enforceIdentityBindingSupported = true;
+  constructor({ startupTimeoutMs = 15000 } = {}) {
+    this.enforceIdentityBindingSupported = process.platform === 'win32';
+    this.startupTimeoutMs = startupTimeoutMs;
+    this.children = new Map();
+    this.exits = new Map();
   }
 
-  listPortObservations() {
-    const now = new Date().toISOString();
-    try {
-      const out = execFileSync('ss', ['-tlnp'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-      const lines = out.split('\n').slice(1);
-      const results = [];
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        const parts = line.trim().split(/\s+/);
-        const localAddrPort = parts[3] || '';
-        const portMatch = localAddrPort.match(/:(\d+)$/);
-        if (!portMatch) continue;
-        const port = Number(portMatch[1]);
-        const pidMatch = line.match(/pid=(\d+)/);
-        const pid = pidMatch ? Number(pidMatch[1]) : null;
-        const procDetails = pid ? this.getProcessByPid(pid) : null;
-        results.push({
-          port,
-          protocol: 'TCP',
-          localAddress: localAddrPort.replace(/:(\d+)$/, ''),
-          pid,
-          processStartTime: procDetails?.processStartTime || null,
-          command: procDetails?.command || null,
-          executablePath: procDetails?.executablePath || null,
-          workingDirectory: procDetails?.workingDirectory || null,
-          accessDenied: !pid || Boolean(procDetails?.accessDenied),
-          observedAt: now,
+  async request(payload) {
+    if (process.platform !== 'win32') throw new Error('Live process operations currently support Windows only.');
+    const helper = fileURLToPath(new URL('./windows-process.ps1', import.meta.url));
+    return new Promise((resolve, reject) => {
+      const child = execFile('powershell.exe', ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',helper],
+        {windowsHide:true, encoding:'utf8',timeout:30000,maxBuffer:4*1024*1024}, (error,stdout,stderr) => {
+          try {
+            const reply = JSON.parse(stdout.trim().replace(/^\uFEFF/, ''));
+            if (!reply.ok) throw new Error(reply.error || stderr || 'Windows adapter operation failed.');
+            resolve(reply.result);
+          } catch (parseError) {
+            reject(new Error('Windows adapter: '+(parseError.message || error?.message || stderr)));
+          }
         });
-      }
-      return results.sort((a, b) => a.port - b.port);
-    } catch {
-      return [];
+      child.stdin.on('error',()=>{});
+      child.stdin.end(JSON.stringify(payload));
+    });
+  }
+
+  async listPortObservations({ports} = {}) {
+    const rows = await this.request({action:'snapshot', ports});
+    return (Array.isArray(rows) ? rows : rows ? [rows] : []).sort((a,b)=>a.port-b.port || a.pid-b.pid);
+  }
+
+  async getProcessByPid(pid) {
+    return this.request({action:'process',pid});
+  }
+
+  async stopProcessBound(identity) {
+    if (!this.enforceIdentityBindingSupported) return {stopped:false,code:'UNSUPPORTED_IDENTITY_BINDING',message:'Stop refused: identity binding is unavailable.'};
+    try {
+      const result = await this.request({action:'stop',...identity});
+      return result;
+    } catch (error) {
+      return {stopped:false,code:'STOP_REFUSED',message:error.message};
     }
   }
 
-  getProcessByPid(pid) {
+  async spawnManagedProcess({executable,args,workingDirectory,port,logPath}) {
+    if (!this.enforceIdentityBindingSupported) return {launched:false,code:'UNSUPPORTED_PLATFORM',message:'Managed launch currently supports Windows only.'};
+    const existing = await this.listPortObservations({ports:[port]});
+    if (existing.length) return {launched:false,code:'PORT_ALREADY_OCCUPIED',message:'Port '+port+' is occupied by PID '+existing[0].pid+'. Inspect it before launching.'};
+    let child;
+    let outputFd;
+    let identity;
     try {
-      const lstart = execFileSync('ps', ['-p', String(pid), '-o', 'lstart='], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }).trim();
-      const args = execFileSync('ps', ['-p', String(pid), '-o', 'args='], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }).trim();
-      if (!lstart) return null;
-      return {
-        pid,
-        processStartTime: lstart,
-        command: args,
-        executablePath: args.split(' ')[0] || null,
-        workingDirectory: null,
-        accessDenied: false,
-      };
-    } catch {
-      return null;
+      fs.mkdirSync(path.dirname(logPath),{recursive:true});
+      outputFd = fs.openSync(logPath,'a');
+      child = spawn(executable,args,{cwd:workingDirectory,windowsHide:true,detached:true,shell:false,stdio:['ignore',outputFd,outputFd],env:{...process.env,PORT:String(port)}});
+      child.on('exit',(code,signal)=>this.exits.set(child.pid,{code,signal,at:new Date().toISOString()}));
+      await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject);});
+      this.children.set(child.pid,child);
+      identity = await this.getProcessByPid(child.pid);
+      if (!identity?.processStartTime || !identity.executablePath) throw new Error('Cannot verify the spawned process identity; launch was not registered.');
+      const deadline = Date.now()+this.startupTimeoutMs;
+      while (Date.now()<deadline) {
+        if (this.exits.has(child.pid)) throw new Error('Child exited before its expected port became ready. See '+logPath);
+        const listeners=await this.listPortObservations({ports:[port]});
+        const own=listeners.find(row=>row.pid===child.pid && row.processStartTime===identity.processStartTime);
+        if (own) {
+          child.unref();
+          return {launched:true,code:'LAUNCHED_OK',pid:child.pid,processStartTime:identity.processStartTime,executablePath:identity.executablePath,command:own.command,port,preserveArgs:[...args],logPath};
+        }
+        if (listeners.length) throw new Error('Expected port '+port+' is now held by a different process. Only direct-child listeners are supported; inspect '+logPath);
+        await new Promise(resolve=>setTimeout(resolve,150));
+      }
+      throw new Error('No listener owned by the launched process appeared on port '+port+'. Check command arguments and '+logPath);
+    } catch (error) {
+      let cleanup = '';
+      if (child?.pid && child.exitCode===null) {
+        if (identity?.processStartTime && identity.executablePath) {
+          const stopped=await this.stopProcessBound({pid:child.pid,expectedStartTime:identity.processStartTime,expectedExecutablePath:identity.executablePath});
+          if(!stopped.stopped) cleanup=' Cleanup was refused; inspect PID '+child.pid+'.';
+        } else {
+          // Node's child handle remains bound to this child; never issue a PID-based kill.
+          child.kill();
+        }
+        child.unref();
+      }
+      return {launched:false,code:'LAUNCH_SPAWN_ERROR',message:'Failed to launch "'+executable+'": '+error.message+cleanup,logPath};
+    } finally {
+      if (outputFd !== undefined) fs.closeSync(outputFd);
     }
   }
 }

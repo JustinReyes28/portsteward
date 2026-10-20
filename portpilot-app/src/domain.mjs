@@ -1,143 +1,45 @@
-/**
- * @fileoverview PortPilot Domain Model & Matching Rules (Milestones 1, 2, 3, 4)
- * Separates domain logic from UI, persistence, and OS adapters.
- */
-
+import path from 'node:path';
 export const SCHEMA_VERSION = 1;
-
-/**
- * Valid ownership confidence tiers.
- * Never guesses ownership when evidence is incomplete or conflicting.
- */
 export const OwnershipConfidence = Object.freeze({
-  EXACT_MANAGED: 'exact-managed',         // Launched by PortPilot with matching PID + startTime
-  PATH_AND_PORT: 'path-and-port',         // Process path/cwd resides inside project rootPath AND port matches
-  PORT_ONLY: 'port-only',                 // Port matches single project's expectedPorts, path unverified
-  AMBIGUOUS_CONFLICT: 'ambiguous-conflict', // Multiple projects claim this port/path
-  UNMATCHED: 'unmatched',                 // Active listener not matching any registered project
-  ACCESS_DENIED: 'access-denied',         // Port active, but OS denied process identity inspection
+  EXACT_MANAGED:'exact-managed', PATH_AND_PORT:'path-and-port', PORT_ONLY:'port-only',
+  AMBIGUOUS_CONFLICT:'ambiguous-conflict', UNMATCHED:'unmatched', ACCESS_DENIED:'access-denied'
 });
-
-/**
- * Normalizes file paths across Windows and POSIX for safe comparison without altering spaces.
- * @param {string} rawPath
- * @returns {string}
- */
-export function normalizePathForComparison(rawPath) {
-  if (!rawPath || typeof rawPath !== 'string') return '';
-  const trimmed = rawPath.trim().replace(/\\/g, '/').replace(/\/+$/, '');
-  // Windows drive-letter paths are compared case-insensitively
-  if (/^[a-zA-Z]:(\/|$)/.test(trimmed)) {
-    return trimmed.toLowerCase();
-  }
-  return trimmed;
+export function normalizePathForComparison(value) {
+  if(typeof value!=='string' || !value) return '';
+  const windows = /^[a-z]:[\\/]/i.test(value) || /^\\\\/.test(value);
+  const normalized=(windows?path.win32.normalize(value).toLowerCase():path.posix.normalize(value)).replace(/\\/g,'/');
+  return normalized.replace(/\/+$/,'') || '/';
 }
-
-/**
- * Checks whether an observed process path or command references a project's rootPath.
- * Preserves exact boundaries so "C:/Apps/web" does not falsely match "C:/Apps/web-admin".
- * @param {string} rootPath
- * @param {object} observation
- * @returns {boolean}
- */
 export function doesObservationMatchProjectPath(rootPath, observation) {
-  const normRoot = normalizePathForComparison(rootPath);
-  if (!normRoot) return false;
-
-  const candidates = [
-    observation.workingDirectory,
-    observation.executablePath,
-    observation.command,
-  ].filter(Boolean);
-
-  for (const rawCandidate of candidates) {
-    const normCand = normalizePathForComparison(String(rawCandidate));
-    if (normCand === normRoot || normCand.startsWith(normRoot + '/')) {
-      return true;
-    }
-    // Check quoted or embedded path token inside command line
-    const idx = normCand.indexOf(normRoot);
-    if (idx !== -1) {
-      const afterChar = normCand[idx + normRoot.length];
-      if (!afterChar || afterChar === '/' || afterChar === '"' || afterChar === "'" || afterChar === ' ') {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-/**
- * Validates and constructs a Project entity.
- * Treats saved config as untrusted user input and preserves executable/arg boundaries.
- * @param {object} input
- * @returns {object}
- */
-export function validateProjectInput(input) {
-  if (!input || typeof input !== 'object') {
-    throw new Error('Project configuration must be an object.');
-  }
-  const id = String(input.id || '').trim();
-  const name = String(input.name || '').trim();
-  const rootPath = String(input.rootPath || '').trim();
-  const launchExecutable = String(input.launchExecutable || '').trim();
-
-  if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) {
-    throw new Error('Project "id" must be a non-empty alphanumeric/hyphen/underscore identifier.');
-  }
-  if (!name) {
-    throw new Error('Project "name" is required.');
-  }
-  if (!rootPath) {
-    throw new Error('Project "rootPath" is required.');
-  }
-  if (!launchExecutable) {
-    throw new Error('Project "launchExecutable" is required.');
-  }
-  if (!Array.isArray(input.expectedPorts) || input.expectedPorts.length === 0) {
-    throw new Error('Project "expectedPorts" must be a non-empty array of valid TCP port numbers (1-65535).');
-  }
-
-  const expectedPorts = [];
-  for (const p of input.expectedPorts) {
-    const portNum = Number(p);
-    if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
-      throw new Error(`Invalid port number "${p}" in project "${name}". Must be an integer between 1 and 65535.`);
-    }
-    if (!expectedPorts.includes(portNum)) {
-      expectedPorts.push(portNum);
-    }
-  }
-
-  const launchArgs = Array.isArray(input.launchArgs)
-    ? input.launchArgs.map((arg) => String(arg))
-    : [];
-
-  return {
-    id,
-    name,
-    rootPath,
-    expectedPorts,
-    launchExecutable,
-    launchArgs,
-    favorite: Boolean(input.favorite),
-    createdAt: input.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+  const root=normalizePathForComparison(rootPath);
+  if(!root)return false;
+  const inside=value=>{
+    const p=normalizePathForComparison(value);
+    return p===root || p.startsWith(root.endsWith('/')?root:root+'/');
   };
+  if([observation.workingDirectory,observation.executablePath].some(value=>value && inside(value)))return true;
+  // Compare complete command tokens, never a substring of an arbitrary argument.
+  const tokens=String(observation.command || '').match(/"[^"]*"|[^\s"]+/g)||[];
+  return tokens.some(token=>inside(token.replace(/^"|"$/g,'')));
 }
-
-/**
- * Matches a single port observation against registered projects and active managed runs.
- * Milestone 1 & Milestone 2 core domain rule:
- * - Separates observed process identity from saved project configuration.
- * - Surfaces conflicts explicitly when multiple registry entries match.
- * - Never presents guessed ownership as fact when privileges are missing.
- *
- * @param {object} observation
- * @param {Array<object>} projects
- * @param {Array<object>} managedRuns
- * @returns {object}
- */
+function requiredText(value,label) {
+  if(typeof value!=='string' || !value.trim() || /[\u0000-\u001f\u007f]/.test(value))throw new Error(label+' must be non-empty text without control characters.');
+  return value.trim();
+}
+export function validateProjectInput(input) {
+  if(!input || typeof input!=='object' || Array.isArray(input))throw new Error('Project configuration must be an object.');
+  const id=requiredText(input.id,'Project id');
+  if(!/^[a-zA-Z0-9_-]{1,80}$/.test(id))throw new Error('Project id must contain at most 80 letters, digits, hyphens or underscores.');
+  const name=requiredText(input.name,'Project name');
+  const rootPath=requiredText(input.rootPath,'Project rootPath');
+  if(!path.win32.isAbsolute(rootPath) && !path.posix.isAbsolute(rootPath))throw new Error('Project rootPath must be absolute.');
+  const launchExecutable=requiredText(input.launchExecutable,'Project launchExecutable');
+  if(!Array.isArray(input.expectedPorts)||!input.expectedPorts.length||input.expectedPorts.some(p=>!Number.isInteger(p)||p<1||p>65535))throw new Error('Project expectedPorts must be an array of integer TCP ports (1–65535).');
+  if(!Array.isArray(input.launchArgs)||input.launchArgs.some(arg=>typeof arg!=='string'||/[\u0000-\u001f\u007f]/.test(arg)))throw new Error('Project launchArgs must be an array of strings without control characters.');
+  if(input.group!==undefined && (typeof input.group!=='string'||input.group.length>80||/[\u0000-\u001f\u007f]/.test(input.group)))throw new Error('Project group must be text of at most 80 characters.');
+  if(input.favorite!==undefined && typeof input.favorite!=='boolean')throw new Error('Project favorite must be a boolean.');
+  return {id,name,rootPath,expectedPorts:[...new Set(input.expectedPorts)],launchExecutable,launchArgs:[...input.launchArgs],favorite:input.favorite||false,group:input.group||'',createdAt:input.createdAt||new Date().toISOString(),updatedAt:input.updatedAt||new Date().toISOString()};
+}
 export function evaluateObservationOwnership(observation, projects, managedRuns = []) {
   const port = observation.port;
   const portClaimants = projects.filter((proj) => proj.expectedPorts.includes(port));
@@ -243,7 +145,7 @@ export function evaluateObservationOwnership(observation, projects, managedRuns 
       port,
       observation,
       matchedProjects: [candidate],
-      primaryProject: candidate,
+      primaryProject: null,
       managedRun: null,
       confidence: OwnershipConfidence.PORT_ONLY,
       conflictProjects: [],

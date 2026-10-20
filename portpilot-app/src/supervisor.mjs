@@ -1,316 +1,124 @@
-/**
- * @fileoverview PortPilot Process Supervisor & Workflow Controller (Milestones 1–4)
- * Coordinates read-only port discovery, project matching, identity-bound stop previews,
- * managed launches, and controlled restarts restricted strictly to tool-created runs.
- */
-
-import {
-  OwnershipConfidence,
-  evaluateObservationOwnership,
-  validateProjectInput,
-} from './domain.mjs';
-
+import path from 'node:path';
+import {randomUUID} from 'node:crypto';
+import {OwnershipConfidence,evaluateObservationOwnership,validateProjectInput} from './domain.mjs';
 export class PortPilotSupervisor {
-  /**
-   * @param {object} deps
-   * @param {import('./storage.mjs').RegistryStore} deps.store
-   * @param {import('./adapters.mjs').FakeOsAdapter} deps.adapter
-   */
-  constructor({ store, adapter }) {
-    this.store = store;
-    this.adapter = adapter;
-    this.runCounter = 1;
-  }
-
-  /**
-   * Milestone 1 & 2: Inspects live ports and correlates them with the saved project registry.
-   * Also reconciles any ManagedRun records whose underlying OS processes have exited.
-   *
-   * @param {object} options
-   * @param {string} [options.filterProjectId]
-   * @param {boolean} [options.favoritesOnly]
-   */
-  inspectDashboard({ filterProjectId = null, favoritesOnly = false } = {}) {
-    const state = this.store.load();
-    const observations = this.adapter.listPortObservations();
-
-    // Reconcile managed runs against live OS process table
-    for (const run of state.managedRuns) {
-      if (run.status === 'running') {
-        const live = this.adapter.getProcessByPid(run.pid);
-        if (!live || live.processStartTime !== run.processStartTime) {
-          run.status = 'exited';
-          run.endedAt = new Date().toISOString();
-          this.store.recordManagedRun(run);
-        }
+  constructor({store,adapter}) {this.store=store;this.adapter=adapter;this.previews=new Map();}
+  async inspectDashboard({filterProjectId=null,favoritesOnly=false,group=null,ports}={}) {
+    let state=this.store.load();const recoveryNotice=this.store.lastRecoveryNotice;
+    const observations=await this.adapter.listPortObservations({ports});
+    for(const run of state.managedRuns.filter(r=>r.status==='running')) {
+      const live=await this.adapter.getProcessByPid(run.pid);
+      if(!live||(!live.accessDenied&&live.processStartTime!==run.processStartTime)) {
+        this.store.recordManagedRun({runId:run.runId,status:'exited',endedAt:new Date().toISOString(),lastError:live?'Recorded identity no longer matches.':null});
       }
     }
-
-    let projects = state.projects;
-    if (favoritesOnly) {
-      projects = projects.filter((p) => p.favorite);
+    state=this.store.load();
+    const include=p=>(!favoritesOnly||p.favorite)&&(!filterProjectId||p.id===filterProjectId)&&(!group||p.group===group);
+    const projects=state.projects.filter(include);
+    const matches=observations.map(obs=>evaluateObservationOwnership(obs,state.projects,state.managedRuns));
+    return {observedAt:new Date().toISOString(),projects,allProjectsCount:state.projects.length,
+      portMatches:matches.filter(m=>(!favoritesOnly&&!filterProjectId&&!group)||m.matchedProjects.some(include)),
+      recentRuns:state.managedRuns.filter(r=>(!filterProjectId||r.projectId===filterProjectId)&&(!favoritesOnly&&!group||projects.some(p=>p.id===r.projectId))).slice(0,100),recoveryNotice};
+  }
+  saveProject(input){return this.store.upsertProject(validateProjectInput(input));}
+  cancelPreview(){this.previews.clear();}
+  _issue(payload) {
+    this.previews.clear();
+    const token={...structuredClone(payload),token:randomUUID(),expiresAt:Date.now()+10*60*1000};
+    this.previews.set(token.token,structuredClone(token));return token;
+  }
+  _consume(input,kind) {
+    const token=this.previews.get(input?.token);this.previews.clear();
+    if(!token||token.kind!==kind||token.expiresAt<Date.now())throw new Error('Preview expired, cancelled or already used. Preview the action again.');
+    return token;
+  }
+  async previewStopByPort(port,{pid=null,address=null}={}) {
+    this.cancelPreview();
+    const state=this.store.load();
+    const rows=(await this.adapter.listPortObservations({ports:[Number(port)]})).filter(row=>row.port===Number(port)&&(!pid||row.pid===Number(pid))&&(!address||row.localAddress===address));
+    const identities=new Set(rows.map(r=>r.pid+':'+r.processStartTime));
+    if(!rows.length)return {canStop:false,canRestart:false,port:Number(port),reason:'No active listener found on port '+port+'.'};
+    if(identities.size>1)return {canStop:false,canRestart:false,port:Number(port),reason:'Multiple processes listen on this port. Select its PID and address explicitly.'};
+    const obs=rows[0];const ownership=evaluateObservationOwnership(obs,state.projects,state.managedRuns);
+    if(obs.accessDenied||!obs.pid||!obs.processStartTime||!obs.executablePath)return {canStop:false,canRestart:false,port:obs.port,pid:obs.pid,reason:'Stop unavailable: identity details are inaccessible due to OS privilege boundaries.'};
+    if(!this.adapter.enforceIdentityBindingSupported)return {canStop:false,canRestart:false,port:obs.port,pid:obs.pid,reason:'Current OS adapter cannot guarantee identity-bound process termination.'};
+    const managed=ownership.confidence===OwnershipConfidence.EXACT_MANAGED;
+    return this._issue({kind:'stop',canStop:true,canRestart:managed,port:obs.port,pid:obs.pid,localAddress:obs.localAddress,
+      processStartTime:obs.processStartTime,executablePath:obs.executablePath,command:obs.command,workingDirectory:obs.workingDirectory,
+      projectName:ownership.primaryProject?.name||ownership.managedRun?.projectName||null,projectId:ownership.primaryProject?.id||ownership.managedRun?.projectId||null,
+      managedRunId:ownership.managedRun?.runId||null,run:ownership.managedRun||null,confidence:ownership.confidence,
+      conflictProjects:ownership.conflictProjects.map(p=>p.name),restartPolicyNote:managed?'Exact managed run; eligible for controlled restart.':'External process: restart is unavailable; no launch command is inferred.'});
+  }
+  async _stop(preview) {
+    const live=await this.adapter.getProcessByPid(preview.pid);
+    if(!live||live.accessDenied||live.processStartTime!==preview.processStartTime)
+      return {ok:false,code:'IDENTITY_MISMATCH_PID_REUSED',message:'Stop refused (PID Reuse Protection): process identity changed or is unavailable.'};
+    const result=await this.adapter.stopProcessBound({pid:preview.pid,expectedStartTime:preview.processStartTime,expectedExecutablePath:preview.executablePath});
+    if(result.stopped&&preview.managedRunId) {
+      try {this.store.recordManagedRun({runId:preview.managedRunId,status:'stopped',endedAt:result.stoppedAt});}
+      catch(error){return {ok:true,historyUpdated:false,code:'STOPPED_HISTORY_WRITE_FAILED',message:'Process stopped, but history could not be saved: '+error.message,pid:preview.pid,port:preview.port};}
     }
-    if (filterProjectId) {
-      projects = projects.filter((p) => p.id === filterProjectId);
-    }
-
-    const matches = observations.map((obs) =>
-      evaluateObservationOwnership(obs, state.projects, state.managedRuns)
-    );
-
-    const filteredMatches = matches.filter((m) => {
-      if (filterProjectId) {
-        return m.matchedProjects.some((p) => p.id === filterProjectId);
+    return {ok:result.stopped,code:result.code,message:result.message,pid:preview.pid,port:preview.port};
+  }
+  async executeConfirmedStop(input) {
+    try{return await this._stop(this._consume(input,'stop'));}
+    catch(error){return {ok:false,code:'INVALID_PREVIEW_TOKEN',message:input?.reason||error.message};}
+  }
+  previewLaunch(projectId,{preferredPort=null}={}) {
+    const project=this.store.load().projects.find(p=>p.id===projectId);
+    if(!project)throw new Error('Project "'+projectId+'" not found.');
+    const port=preferredPort===null?project.expectedPorts[0]:Number(preferredPort);
+    if(!project.expectedPorts.includes(port))throw new Error('Choose one of this profile’s configured ports.');
+    return this._issue({kind:'launch',project,port});
+  }
+  async _launch(project,port) {
+    const runId='run-'+randomUUID();
+    const logPath=path.join(path.dirname(this.store.filePath),'logs',runId+'.log');
+    const outcome=await this.adapter.spawnManagedProcess({executable:project.launchExecutable,args:project.launchArgs,workingDirectory:project.rootPath,port,logPath});
+    const entry={runId,projectId:project.id,projectName:project.name,port,
+      launchExecutable:project.launchExecutable,launchArgs:[...project.launchArgs],rootPath:project.rootPath,logPath,
+      pid:outcome.pid||null,processStartTime:outcome.processStartTime||null,executablePath:outcome.executablePath||null,
+      startedAt:new Date().toISOString(),endedAt:outcome.launched?null:new Date().toISOString(),status:outcome.launched?'running':'failed',lastError:outcome.launched?null:outcome.message};
+    let run;
+    try {run=this.store.recordManagedRun(entry);}
+    catch(error) {
+      let cleanup='';
+      if(outcome.launched) {
+        const stopped=await this.adapter.stopProcessBound({pid:outcome.pid,expectedStartTime:outcome.processStartTime,expectedExecutablePath:outcome.executablePath});
+        cleanup=stopped.stopped?' The newly launched process was stopped.':' Cleanup was refused; inspect PID '+outcome.pid+'.';
       }
-      if (favoritesOnly) {
-        return m.matchedProjects.some((p) => p.favorite);
-      }
-      return true;
-    });
-
-    return {
-      observedAt: new Date().toISOString(),
-      projects,
-      allProjectsCount: state.projects.length,
-      portMatches: filteredMatches,
-      recentRuns: state.managedRuns.slice(0, 15),
-      recoveryNotice: this.store.lastRecoveryNotice,
-    };
+      return {ok:false,code:'LAUNCH_HISTORY_WRITE_FAILED',message:'Run could not be recorded: '+error.message+cleanup};
+    }
+    return {ok:outcome.launched,code:outcome.launched?'MANAGED_RUN_STARTED':outcome.code,run,runId,message:outcome.launched?'Launched "'+project.name+'" on port '+port+' with PID '+outcome.pid+'.':outcome.message};
   }
-
-  /**
-   * Milestone 2: Adds or updates a project in the local registry.
-   */
-  saveProject(projectInput) {
-    const validated = validateProjectInput(projectInput);
-    return this.store.upsertProject(validated);
+  async executeConfirmedLaunch(input) {
+    try{const p=this._consume(input,'launch');return await this._launch(p.project,p.port);}
+    catch(error){return {ok:false,code:'LAUNCH_REFUSED',message:error.message};}
   }
-
-  /**
-   * Milestone 3: Generates a mandatory pre-stop preview before any process change.
-   * Displays project, command, port, PID, start time, and whether restart is available.
-   */
-  previewStopByPort(port) {
-    const state = this.store.load();
-    const observations = this.adapter.listPortObservations();
-    const obs = observations.find((o) => o.port === Number(port));
-
-    if (!obs) {
-      return {
-        canStop: false,
-        canRestart: false,
-        port: Number(port),
-        reason: `No active listener found on port ${port}.`,
-      };
-    }
-
-    const ownership = evaluateObservationOwnership(obs, state.projects, state.managedRuns);
-
-    if (obs.accessDenied || !obs.pid || !obs.processStartTime) {
-      return {
-        canStop: false,
-        canRestart: false,
-        port: obs.port,
-        pid: obs.pid,
-        ownership,
-        reason:
-          'Stop unavailable: Process identity details (PID / start time) are inaccessible due to OS privilege boundaries. Retaining read-only inspection.',
-      };
-    }
-
-    if (!this.adapter.enforceIdentityBindingSupported) {
-      return {
-        canStop: false,
-        canRestart: false,
-        port: obs.port,
-        pid: obs.pid,
-        ownership,
-        reason:
-          'Stop unavailable: Current OS adapter cannot guarantee identity-bound process termination. Retaining read-only inspection.',
-      };
-    }
-
-    const isManagedByTool = ownership.confidence === OwnershipConfidence.EXACT_MANAGED;
-
-    return {
-      canStop: true,
-      canRestart: isManagedByTool,
-      port: obs.port,
-      pid: obs.pid,
-      processStartTime: obs.processStartTime,
-      executablePath: obs.executablePath,
-      command: obs.command,
-      workingDirectory: obs.workingDirectory,
-      projectName: ownership.primaryProject?.name || null,
-      projectId: ownership.primaryProject?.id || null,
-      managedRunId: ownership.managedRun?.runId || null,
-      confidence: ownership.confidence,
-      conflictProjects: ownership.conflictProjects.map((p) => p.name),
-      restartPolicyNote: isManagedByTool
-        ? `Managed run (${ownership.managedRun.runId}): eligible for controlled stop or restart.`
-        : 'External process: can be stopped explicitly after identity re-verification, but restart is disabled (PortPilot never infers restart commands from unrelated process names).',
-    };
+  async launchProject(id,options={}) {return this.executeConfirmedLaunch(this.previewLaunch(id,options));}
+  async previewRestartByPort(port,options={}) {
+    const p=await this.previewStopByPort(port,options);
+    if(!p.canStop)return {...p,reason:p.reason||'Stop unavailable.'};
+    if(!p.canRestart){this.cancelPreview();return {...p,canStop:false,reason:'Restart refused: process was not launched by PortSteward.'};}
+    return this._issue({...p,kind:'restart'});
   }
-
-  /**
-   * Milestone 3: Executes a deliberate stop bound to the previewed process identity.
-   * Immediately re-reads the process identity before stopping so stale selections cannot hit a reused PID.
-   */
-  executeConfirmedStop(previewToken) {
-    if (!previewToken || !previewToken.canStop) {
-      return {
-        ok: false,
-        code: 'INVALID_PREVIEW_TOKEN',
-        message: previewToken?.reason || 'Stop action requires a valid, confirmable preview token.',
-      };
-    }
-
-    const stopResult = this.adapter.stopProcessBound({
-      pid: previewToken.pid,
-      expectedStartTime: previewToken.processStartTime,
-      expectedExecutablePath: previewToken.executablePath,
-    });
-
-    if (stopResult.stopped && previewToken.managedRunId) {
-      this.store.recordManagedRun({
-        runId: previewToken.managedRunId,
-        status: 'stopped',
-        endedAt: stopResult.stoppedAt,
-      });
-    }
-
-    return {
-      ok: stopResult.stopped,
-      code: stopResult.code,
-      message: stopResult.message,
-      pid: previewToken.pid,
-      port: previewToken.port,
-    };
+  async executeConfirmedRestart(input) {
+    try {
+      const p=this._consume(input,'restart');
+      if(!p.run||!p.canRestart)return {ok:false,code:'UNMANAGED_PROCESS_RESTART_REFUSED',message:'Restart requires an exact managed run.'};
+      const stopped=await this._stop(p);if(!stopped.ok)return stopped;
+      if(stopped.historyUpdated===false)return {...stopped,ok:false,code:'RESTART_HISTORY_WRITE_FAILED',message:'Process stopped; restart refused because history could not be saved.'};
+      const original=validateProjectInput({id:p.run.projectId,name:p.run.projectName,rootPath:p.run.rootPath,
+        expectedPorts:[p.run.port],launchExecutable:p.run.launchExecutable,launchArgs:p.run.launchArgs});
+      const launched=await this._launch(original,p.run.port);
+      if(!launched.ok)return {...launched,message:'Process stopped, but re-launch failed: '+launched.message};
+      return {ok:true,code:'MANAGED_RUN_RESTARTED',previousPid:p.pid,previousRunId:p.managedRunId,newRun:launched.run,
+        message:'Restarted "'+p.projectName+'" on port '+p.port+': stopped PID '+p.pid+' and launched PID '+launched.run.pid+'.'};
+    }catch(error){return {ok:false,code:'RESTART_REFUSED',message:error.message};}
   }
-
-  /**
-   * Milestone 3 & 4: Launches a registered project from its saved profile.
-   * Checks for port conflicts upfront and leaves registry intact if launch fails.
-   */
-  launchProject(projectId, { preferredPort = null } = {}) {
-    const state = this.store.load();
-    const project = state.projects.find((p) => p.id === projectId);
-    if (!project) {
-      return {
-        ok: false,
-        code: 'PROJECT_NOT_FOUND',
-        message: `Project "${projectId}" does not exist in the registry.`,
-      };
-    }
-
-    const targetPort = preferredPort ? Number(preferredPort) : project.expectedPorts[0];
-    const runId = `run-${Date.now()}-${this.runCounter++}`;
-
-    const spawnOutcome = this.adapter.spawnManagedProcess({
-      executable: project.launchExecutable,
-      args: project.launchArgs,
-      workingDirectory: project.rootPath,
-      port: targetPort,
-    });
-
-    if (!spawnOutcome.launched) {
-      this.store.recordManagedRun({
-        runId,
-        projectId: project.id,
-        projectName: project.name,
-        pid: null,
-        processStartTime: null,
-        port: targetPort,
-        launchExecutable: project.launchExecutable,
-        launchArgs: project.launchArgs,
-        rootPath: project.rootPath,
-        startedAt: new Date().toISOString(),
-        endedAt: new Date().toISOString(),
-        status: 'failed',
-        lastError: spawnOutcome.message,
-      });
-
-      return {
-        ok: false,
-        code: spawnOutcome.code,
-        runId,
-        projectId: project.id,
-        port: targetPort,
-        message: spawnOutcome.message,
-      };
-    }
-
-    const managedRun = this.store.recordManagedRun({
-      runId,
-      projectId: project.id,
-      projectName: project.name,
-      pid: spawnOutcome.pid,
-      processStartTime: spawnOutcome.processStartTime,
-      port: targetPort,
-      launchExecutable: project.launchExecutable,
-      launchArgs: project.launchArgs,
-      rootPath: project.rootPath,
-      startedAt: spawnOutcome.processStartTime,
-      endedAt: null,
-      status: 'running',
-      lastError: null,
-    });
-
-    return {
-      ok: true,
-      code: 'MANAGED_RUN_STARTED',
-      run: managedRun,
-      message: `Launched "${project.name}" (${runId}) on port ${targetPort} with PID ${spawnOutcome.pid}.`,
-    };
-  }
-
-  /**
-   * Milestone 3: Controlled restart strictly limited to runs created by PortPilot.
-   * Refuses to restart external/unrelated processes.
-   */
-  restartByPort(port) {
-    const preview = this.previewStopByPort(port);
-    if (!preview.canStop) {
-      return {
-        ok: false,
-        code: 'RESTART_STOP_UNAVAILABLE',
-        message: `Cannot restart on port ${port}: ${preview.reason}`,
-      };
-    }
-
-    if (!preview.canRestart || !preview.managedRunId || !preview.projectId) {
-      return {
-        ok: false,
-        code: 'UNMANAGED_PROCESS_RESTART_REFUSED',
-        message: `Restart refused on port ${port} (PID ${preview.pid}): Process was not launched by PortPilot. Only managed runs have a verified restart profile.`,
-      };
-    }
-
-    const stopRes = this.executeConfirmedStop(preview);
-    if (!stopRes.ok) {
-      return {
-        ok: false,
-        code: stopRes.code,
-        message: `Restart aborted during stop phase: ${stopRes.message}`,
-      };
-    }
-
-    const launchRes = this.launchProject(preview.projectId, { preferredPort: preview.port });
-    if (!launchRes.ok) {
-      return {
-        ok: false,
-        code: launchRes.code,
-        message: `Process stopped, but re-launch failed: ${launchRes.message}`,
-      };
-    }
-
-    return {
-      ok: true,
-      code: 'MANAGED_RUN_RESTARTED',
-      previousRunId: preview.managedRunId,
-      previousPid: preview.pid,
-      newRun: launchRes.run,
-      message: `Restarted "${preview.projectName}" on port ${preview.port}: stopped PID ${preview.pid} and launched PID ${launchRes.run.pid} (${launchRes.run.runId}).`,
-    };
+  async restartByPort(port) {
+    const p=await this.previewRestartByPort(port);
+    if(!p.canRestart)return {ok:false,code:'UNMANAGED_PROCESS_RESTART_REFUSED',message:p.reason};
+    return this.executeConfirmedRestart(p);
   }
 }
