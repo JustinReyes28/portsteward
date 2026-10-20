@@ -1,0 +1,27 @@
+{
+  "name": "portpilot",
+  "version": "0.1.0-alpha.1",
+  "description": "Project-aware local development port dashboard and controlled server supervisor",
+  "license": "MIT",
+  "type": "module",
+  "author": "Justin Reyes (@JustinReyes28)",
+  "bin": {
+    "portpilot": "./src/cli.mjs"
+  },
+  "scripts": {
+    "start": "node ./src/cli.mjs",
+    "demo": "node ./src/cli.mjs --demo-walkthrough",
+    "test": "node --test ./test/portpilot.test.mjs"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "port-manager",
+    "dev-server",
+    "process-supervisor",
+    "cli",
+    "tui",
+    "windows"
+  ]
+}
