@@ -9,3 +9,5 @@ Application operation and local verification use system APIs, local files and lo
 Uploads consume cellular data too: original local handoff documents and source were uploaded to the private repository as part of the required GitHub setup. No demo video was uploaded. Exact transport byte totals from the available tools are unavailable, so no numeric cellular usage claim is made.
 
 Continue using local fixtures and built-in tests. Phase 4 clean installs/releases or a new dependency decision may introduce downloads; identify those before starting.
+
+Public-sharing follow-up: press copy was written from local source/evidence; two PNG cards were rasterized with installed Windows fonts and System.Drawing. The cards total 79,621 bytes. No image, font, package or runtime was downloaded. Additional network work was limited to GitHub metadata, the press-kit upload and headers-only anonymous access checks.

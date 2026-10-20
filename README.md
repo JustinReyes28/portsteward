@@ -2,7 +2,7 @@
 
 Identify the actual process behind a busy development port, compare it with saved project profiles, and deliberately manage a server.
 
-Windows-first, dependency-free Node.js terminal application. Former local codename: PortPilot. The implementation is an alpha for phase 4 validation; no public package or release has been published.
+A Windows terminal application with no third-party npm dependencies. The source is public. Former local codename: PortPilot. The implementation is an alpha for phase 4 validation; no public package or release has been published.
 
 ## Start without downloading packages
 
@@ -66,10 +66,14 @@ The demo is explicitly simulated. The Windows integration test creates real isol
 
 [Build evidence](docs/PHASE-03-Build-and-Evidence.md) · [Execution status](docs/EXECUTION-STATUS.md) · [Architecture](docs/PHASE-02-Architecture.md) · [GitHub status](docs/GITHUB-STATUS.md)
 
+## Share and press materials
+
+The [press kit](press/README.md) includes Reddit, LinkedIn and Twitter/X drafts, two PNG share images, product facts, alt text and a 30-second demo script. The cards use labelled illustrated sample data.
+
 ## Plans and credit
 
 [Product brief](docs/PHASE-01-Product-Brief.md) · [User stories](docs/USER-STORIES.md) · [All five phase plans](Project-Plans-2026-10-12.md) · [Provenance](docs/PROVENANCE.md)
 
 [fkill-cli](https://github.com/sindresorhus/fkill-cli) inspired the original narrow process-management direction. This implementation uses the supplied original scaffold and new local code; no upstream source or assets were copied. The provenance record describes comparison tools without claiming these features are unprecedented.
 
-The earlier Word handoffs are retained historical drafts. Their completion/support claims are superseded by the current Markdown evidence and test results. Phase 4 beta testing/release and phase 5 marketing remain future work. MIT license.
+The earlier Word handoffs are retained historical drafts. Their completion/support claims are superseded by the current Markdown evidence and test results. Phase 4 beta testing and a versioned release remain future work. Launch materials are prepared in the press kit; social posting remains pending. MIT license.

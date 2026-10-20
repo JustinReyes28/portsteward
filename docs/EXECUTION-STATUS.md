@@ -11,7 +11,7 @@ External interviews remain explicitly pending with assumptions documented, as al
 ## Phase 2: complete
 [Architecture and interaction states](PHASE-02-Architecture.md), schema/persistence/recovery rules, dependency decision, original licensed scaffold, [six rendered state sketches](evidence/terminal-states.txt) and [measured baseline](evidence/performance.json) are present.
 The proposed React/Ink/TypeScript stack was replaced by Node built-ins while implementing actual keyboard interaction. No package install was necessary.
-Private repository [JustinReyes28/portsteward](https://github.com/JustinReyes28/portsteward) is verified, with reviewed scaffold/implementation commits, four milestone issues and Windows CI.
+Repository [JustinReyes28/portsteward](https://github.com/JustinReyes28/portsteward) is verified, with reviewed scaffold/implementation commits, four milestone issues and Windows CI. It was created privately and made public at the user’s later request.
 
 ## Phase 3: complete
 All four build milestones and three product differences are working together: real Windows inspection, saved profiles/evidence, deliberate handle-bound stop and managed launch/restart, plus favorites/groups/history/import/export/undo/recovery.
@@ -26,3 +26,6 @@ This completes phases 1–3, not the full project. Phase 4 unassisted beta, broa
 ## Data and tools
 No dependency or runtime downloads/installs. Existing Node.js 25.2.1, Git, PowerShell and GitHub CLI were used.
 Online work was limited to bounded text/source/name checks, the required private GitHub uploads/issues and CI verification. [Data-use record](DATA-USAGE.md).
+
+## Public sharing update
+On 20 October 2026 the user requested public repository access and press materials. Public access is verified. The [press kit](../press/README.md) is prepared; social posting, external beta validation and a versioned release remain pending.

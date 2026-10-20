@@ -2,7 +2,7 @@
 Executed 20 October 2026, Asia/Singapore. Product: PortSteward; local folder codename: PortPilot.
 
 Implementation commit: [12bc279](https://github.com/JustinReyes28/portsteward/commit/12bc27930caa7757dabd818536b176ec3abccde4).
-The repository is private under the verified account JustinReyes28. This is an alpha handoff to phase 4, not a public release or completed beta.
+The repository is under the verified account JustinReyes28; current visibility is recorded in GITHUB-STATUS.md. This is an alpha handoff to phase 4, not a public release or completed beta.
 
 ## Milestone 1: read-only live view
 [Issue 1](https://github.com/JustinReyes28/portsteward/issues/1), closed by the implementation commit.
